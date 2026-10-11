@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simq"
+dynamic = ["version"]
+description = "A simulation queue for a Linux workstation: live resource dashboard, software detection, and (soon) a core- and GPU-aware job queue."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "PySide6>=6.5",
+    "pyqtgraph>=0.13.3",
+    "psutil>=5.9",
+    "nvidia-ml-py>=12.535",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "ruff>=0.4"]
+
+[project.scripts]
+simq = "simq.__main__:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "simq.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["simq*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

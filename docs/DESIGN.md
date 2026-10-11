@@ -49,7 +49,7 @@ Found automatically at startup, and again when you press **Rescan**.
 - **NAMD**: `namd2`, `namd3`, `charmrun`. Shows CPU / CUDA / MPI build and version.
 - **AMBER**: `pmemd`, `pmemd.cuda`, `pmemd.MPI`, `sander`, `tleap`, `cpptraj`, `$AMBERHOME`, `amber.sh`
 - **Others**: GROMACS (`gmx`), LAMMPS, `mpirun`, VMD, `python3`, NVIDIA driver and CUDA
-- **Where it looks**: `PATH`, `/opt`, `/usr/local`, `~/.local/bin`, your home folder and environment modules
+- **Where it looks**: `PATH`, `/opt`, `/usr/local`, `~/.local/bin`, the folders in your home folder, and any folders you add
 - Each program gets ✔/✘, its path and version. You can also add a path by hand.
 - Jobs are launched with this environment set up (for example `amber.sh` is sourced), so scripts work even when the app wasn't started from a terminal.
 
@@ -92,7 +92,7 @@ Found automatically at startup, and again when you press **Rescan**.
 - With one GPU, GPU jobs run one at a time. CPU jobs run next to them on the remaining cores.
 - **Smaller jobs can go first.** A small job may start ahead of a bigger waiting job only if its estimate shows it will finish before the big job could start anyway.
 - Every job is **pinned to its own cores** (`taskset`), so a job can't use another job's cores.
-- **GPU selection** uses `CUDA_VISIBLE_DEVICES`, so scripts with `+devices 0` work on any GPU without being edited.
+- **GPU selection** uses `CUDA_VISIBLE_DEVICES`, so scripts with `+devices 0` work on any GPU without being edited. Jobs also get `CUDA_DEVICE_ORDER=PCI_BUS_ID`, so GPU numbers match the dashboard and `nvidia-smi` (CUDA otherwise numbers GPUs fastest-first).
 - A GPU job holds its cores for its whole run.
   - Default for a UDB `run_full.sh` GPU job: 2 cores.
   - `run_namd.sh` needs its full core count for minimisation.
@@ -151,6 +151,9 @@ Your real folder is never modified by verification. A test run waits for free re
 
 ```
 simq                      open the window
+simq gui --demo           preview the dashboard with two simulated GPUs
+simq info                 print CPU, memory, GPUs and disks
+simq detect [--json]      print the simulation software found
 simq add <folder> [--cores N] [--gpu auto|0|1|none] [--after ID] [--at "22:00"]
 simq ls                   list the queue
 simq check <ID>           quick check
