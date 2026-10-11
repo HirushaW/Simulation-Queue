@@ -54,14 +54,23 @@ def machine(tmp_path):
     return home, bindir, env
 
 
-def by_name(report):
-    return {i.name: i for i in report.installations}
+def by_name(report, root):
+    """Programs found under ``root`` (the fake install tree), first one per name.
+
+    The scan also looks in fixed system folders (``/usr/local/bin`` …) that a
+    test cannot control, so a real program there must not shadow a fake one.
+    """
+    found = {}
+    for i in report.installations:
+        if i.path.startswith(str(root)):
+            found.setdefault(i.name, i)
+    return found
 
 
-def test_finds_programs_everywhere(machine):
+def test_finds_programs_everywhere(machine, tmp_path):
     home, bindir, env = machine
     report = detect_software(env=env, home=home)
-    found = by_name(report)
+    found = by_name(report, tmp_path)
 
     assert found["namd3"].version == "3.0.2"
     assert found["namd3"].build == "multicore-CUDA"
@@ -96,7 +105,7 @@ def test_extra_folder_and_manual_program(machine, tmp_path):
         env=env,
         home=home,
     )
-    found = by_name(report)
+    found = by_name(report, tmp_path)
     assert found["lmp"].version == "2 Aug 2023"
     assert found["lmp"].found_via == "your folder"
     assert found["my_md_driver"].group == "Added by you"
@@ -104,7 +113,7 @@ def test_extra_folder_and_manual_program(machine, tmp_path):
     assert found["old_tool"].missing
 
 
-def test_cache_skips_unchanged_programs(machine):
+def test_cache_skips_unchanged_programs(machine, tmp_path):
     home, _, env = machine
     counter = home / "calls"
     make_exe(
@@ -120,12 +129,12 @@ def test_cache_skips_unchanged_programs(machine):
     os.utime(exe, (later, later))  # "upgraded": must be probed again
     report = detect_software(env=env, home=home)
     assert counter.read_text().count("x") == 2
-    assert by_name(report)["cp2k.psmp"].version == "2024.1"
+    assert by_name(report, tmp_path)["cp2k.psmp"].version == "2024.1"
     assert last_report() is not None
-    assert by_name(last_report())["cp2k.psmp"].version == "2024.1"
+    assert by_name(last_report(), tmp_path)["cp2k.psmp"].version == "2024.1"
 
 
-def test_failed_probe_is_retried_next_scan(machine):
+def test_failed_probe_is_retried_next_scan(machine, tmp_path):
     home, _, env = machine
     flag = home / "works"
     counter = home / "calls"
@@ -133,9 +142,9 @@ def test_failed_probe_is_retried_next_scan(machine):
         home / "software" / "lmp" / "bin" / "lmp",
         f'echo x >> "{counter}"; [ -f "{flag}" ] && echo "Simulator - 7 Feb 2024"',
     )
-    assert by_name(detect_software(env=env, home=home))["lmp"].version is None
+    assert by_name(detect_software(env=env, home=home), tmp_path)["lmp"].version is None
     flag.touch()
-    assert by_name(detect_software(env=env, home=home))["lmp"].version == "7 Feb 2024"
+    assert by_name(detect_software(env=env, home=home), tmp_path)["lmp"].version == "7 Feb 2024"
     assert counter.read_text().count("x") == 2
 
 
@@ -150,7 +159,7 @@ def test_hanging_program_is_killed(machine, tmp_path):
     started = time.monotonic()
     report = detect_software(env=env, home=home, probe_timeout=0.5)
     assert time.monotonic() - started < 10
-    assert by_name(report)["gmx_mpi"].version is None
+    assert by_name(report, tmp_path)["gmx_mpi"].version is None
     time.sleep(0.3)
     assert not marker.exists()
 
