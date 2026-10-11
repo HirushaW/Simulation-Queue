@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QFont, QPalette
+import os
+import tempfile
+from pathlib import Path
+
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPalette, QPolygonF
 from PySide6.QtWidgets import QApplication
 
 BG = "#0e1116"
@@ -163,6 +168,142 @@ QMenu {{ background: {SURFACE_ALT}; border: 1px solid {BORDER}; padding: 4px; }}
 QMenu::item {{ padding: 6px 18px; border-radius: 5px; }}
 QMenu::item:selected {{ background: #23304d; }}
 QMessageBox {{ background: {SURFACE}; }}
+QDialog {{ background: {SURFACE}; }}
+
+/* Tables */
+QTableView {{
+    background: {SURFACE};
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+    gridline-color: transparent;
+    selection-background-color: #23304d;
+    selection-color: {TEXT};
+    outline: none;
+}}
+QTableView::item {{ padding: 4px 6px; border-bottom: 1px solid {SURFACE_ALT}; }}
+QTableView::item:selected {{ background: #23304d; }}
+QTableCornerButton::section {{ background: {SURFACE}; border: none; }}
+
+/* Tabs */
+QTabWidget::pane {{
+    border: 1px solid {BORDER};
+    border-radius: 12px;
+    background: {SURFACE};
+    top: -1px;
+}}
+QTabBar::tab {{
+    background: transparent;
+    color: {MUTED};
+    padding: 7px 16px;
+    margin-right: 4px;
+    border: none;
+    border-bottom: 2px solid transparent;
+}}
+QTabBar::tab:selected {{ color: {TEXT}; border-bottom: 2px solid {ACCENT}; }}
+QTabBar::tab:hover:!selected {{ color: {TEXT}; }}
+
+/* Inputs */
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateTimeEdit, QPlainTextEdit {{
+    background: {BG};
+    border: 1px solid {BORDER};
+    border-radius: 7px;
+    padding: 5px 8px;
+    selection-background-color: {ACCENT};
+}}
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus,
+QDateTimeEdit:focus, QPlainTextEdit:focus {{ border-color: {ACCENT}; }}
+QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled, QDoubleSpinBox:disabled,
+QDateTimeEdit:disabled {{ color: {FAINT}; }}
+QComboBox::drop-down {{ border: none; width: 22px; }}
+QComboBox QAbstractItemView {{
+    background: {SURFACE_ALT};
+    border: 1px solid {BORDER};
+    selection-background-color: #23304d;
+    outline: none;
+}}
+QPlainTextEdit#Log {{
+    font-family: "DejaVu Sans Mono", "Ubuntu Mono", monospace;
+    font-size: 9pt;
+    background: {BG};
+}}
+QCheckBox, QRadioButton {{ spacing: 8px; }}
+QCheckBox::indicator, QRadioButton::indicator {{
+    width: 16px; height: 16px;
+    border: 1px solid {FAINT};
+    background: {BG};
+}}
+QCheckBox::indicator {{ border-radius: 4px; }}
+QRadioButton::indicator {{ border-radius: 8px; }}
+QCheckBox::indicator:checked, QRadioButton::indicator:checked {{
+    background: {ACCENT};
+    border-color: {ACCENT};
+}}
+QSplitter::handle {{ background: transparent; }}
+#SectionTitle {{ font-size: 11pt; font-weight: 600; margin-top: 6px; }}
+#Small {{ color: {MUTED}; font-size: 9pt; }}
+#Status {{ font-size: 9pt; }}
+QPushButton#Danger {{ color: {BAD}; }}
+QPushButton#Danger:hover {{ border-color: {BAD}; }}
+QPushButton#Danger:disabled {{ color: {FAINT}; border-color: {BORDER}; }}
+QTreeView::indicator, QTableView::indicator {{
+    width: 15px; height: 15px;
+    border: 1px solid {FAINT};
+    border-radius: 4px;
+    background: {BG};
+}}
+QTreeView::indicator:checked, QTableView::indicator:checked {{
+    background: {ACCENT};
+    border-color: {ACCENT};
+}}
+QPushButton#Toolbar {{ padding: 5px 11px; }}
+"""
+
+
+def _arrow_images() -> tuple[str, str]:
+    """Small up/down arrows for spin boxes and drop-downs, drawn once per user."""
+    folder = Path(tempfile.gettempdir()) / f"simq-theme-{os.getuid()}"
+    folder.mkdir(exist_ok=True)
+    paths = []
+    for name, points in (("up", ((1, 9), (8, 2), (15, 9))), ("down", ((1, 2), (8, 9), (15, 2)))):
+        image = QImage(16, 11, QImage.Format.Format_ARGB32)
+        image.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(image)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(MUTED))
+        painter.drawPolygon(QPolygonF([QPointF(x, y) for x, y in points]))
+        painter.end()
+        path = folder / f"{name}.png"
+        image.save(str(path))
+        paths.append(path.as_posix())
+    return paths[0], paths[1]
+
+
+def _input_arrows() -> str:
+    up, down = _arrow_images()
+    return f"""
+QSpinBox, QDoubleSpinBox {{ padding-right: 22px; }}
+QSpinBox::up-button, QDoubleSpinBox::up-button, QDateTimeEdit::up-button {{
+    subcontrol-origin: border; subcontrol-position: top right;
+    width: 20px; border: none; background: transparent;
+}}
+QSpinBox::down-button, QDoubleSpinBox::down-button, QDateTimeEdit::down-button {{
+    subcontrol-origin: border; subcontrol-position: bottom right;
+    width: 20px; border: none; background: transparent;
+}}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow, QDateTimeEdit::up-arrow {{
+    image: url({up}); width: 8px; height: 6px;
+}}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow, QDateTimeEdit::down-arrow {{
+    image: url({down}); width: 8px; height: 6px;
+}}
+QComboBox::drop-down, QDateTimeEdit::drop-down {{
+    subcontrol-origin: padding; subcontrol-position: center right;
+    width: 24px; border: none;
+}}
+QComboBox::down-arrow, QDateTimeEdit::down-arrow {{
+    image: url({down}); width: 9px; height: 6px;
+}}
 """
 
 
@@ -190,7 +331,7 @@ def apply_theme(app: QApplication) -> None:
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, QColor(FAINT))
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, QColor(FAINT))
     app.setPalette(palette)
-    app.setStyleSheet(STYLESHEET)
+    app.setStyleSheet(STYLESHEET + _input_arrows())
     font = QFont(app.font())
     font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
     app.setFont(font)

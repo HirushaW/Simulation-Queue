@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from typing import Any
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -314,6 +315,73 @@ class DisksCard(Card):
             self._rows[d.mount].update_from(d)
 
 
+class RunningJobsCard(Card):
+    """The simulations running now, with the CPUs and GPU each one holds."""
+
+    def __init__(self):
+        super().__init__("Running jobs", "From the queue")
+        self._list = QVBoxLayout()
+        self._list.setSpacing(12)
+        self.body.addLayout(self._list)
+        self._rows: dict[int, tuple[QWidget, Any]] = {}
+        self._empty = label("Nothing is running.", "Muted")
+        self._list.addWidget(self._empty)
+
+    def update_jobs(self, items: list[tuple[Any, Any]]) -> None:
+        """``items``: (job, run) pairs for the running jobs."""
+        ids = [job.id for job, _ in items]
+        if list(self._rows) != ids:
+            for widget, _ in self._rows.values():
+                widget.deleteLater()
+            self._rows = {}
+            for job, _run in items:
+                row = QWidget()
+                lay = QVBoxLayout(row)
+                lay.setContentsMargins(0, 0, 0, 0)
+                lay.setSpacing(5)
+                top = QHBoxLayout()
+                name = label("", "StatValue")
+                where = label("", "Faint")
+                info = label("", "Muted")
+                top.addWidget(name)
+                top.addSpacing(8)
+                top.addWidget(where)
+                top.addStretch(1)
+                top.addWidget(info)
+                lay.addLayout(top)
+                bar = MeterBar(theme.ACCENT, 6)
+                lay.addWidget(bar)
+                self._list.addWidget(row)
+                self._rows[job.id] = (row, (name, where, info, bar))
+        self._empty.setVisible(not items)
+        for job, run in items:
+            name, where, info, bar = self._rows[job.id][1]
+            name.setText(job.name)
+            cpus = run.cpus.replace(",", " ") if run.cpus else ""
+            gpu = f" · GPU {run.gpu_index}" if run.gpu_index is not None else ""
+            count = f"{run.cores} CPU" + ("s" if run.cores != 1 else "")
+            where.setText(count + gpu + (f" · CPU ids {_short(cpus)}" if cpus else ""))
+            parts = []
+            if job.status_text:
+                parts.append(job.status_text)
+            if job.progress is not None:
+                parts.append(f"{100 * job.progress:.0f}%")
+            if job.remaining_s is not None:
+                parts.append(f"{fmt.duration(job.remaining_s)} left")
+            info.setText("  ·  ".join(parts))
+            paused = job.state == "paused"
+            bar.set_value(100 * (job.progress or 0), theme.WARN if paused else theme.ACCENT)
+
+
+def _short(cpus: str) -> str:
+    from ..engine.scheduler import cpu_list_text, parse_cpu_list
+
+    try:
+        return cpu_list_text(parse_cpu_list(cpus))
+    except ValueError:
+        return cpus
+
+
 def _section(title: str) -> QWidget:
     w = label(title.upper(), "StatLabel")
     w.setContentsMargins(4, 6, 0, 0)
@@ -343,6 +411,8 @@ class DashboardPage(QScrollArea):
 
         self.host_card = HostCard(host, gpus)
         lay.addWidget(self.host_card)
+        self.jobs_card = RunningJobsCard()
+        lay.addWidget(self.jobs_card)
 
         lay.addWidget(_section("Processor & memory"))
         top = QHBoxLayout()

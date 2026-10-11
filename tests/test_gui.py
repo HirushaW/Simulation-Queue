@@ -27,7 +27,7 @@ def app():
 
 def test_window_builds_and_updates(app, monkeypatch, tmp_path):
     monkeypatch.setenv("PATH", str(tmp_path))
-    window = MainWindow(demo=True)
+    window = MainWindow(demo=True, start_service=False)
     window.resize(1200, 900)
     window.show()
     sampler = SystemSampler()
@@ -38,8 +38,9 @@ def test_window_builds_and_updates(app, monkeypatch, tmp_path):
     assert len(window.dashboard.gpu_cards) == 2
     assert window.dashboard.disks_card._rows
     assert not window.grab().isNull()
-    # Pages that are not built yet cannot be opened.
-    assert not window.nav.button(1).isEnabled()
+    for index in range(5):
+        window.nav.button(index).click()
+        app.processEvents()
     window.nav.button(2).click()
     assert window.stack.currentWidget() is window.software
     window.close()
@@ -49,7 +50,7 @@ def test_window_without_gpu(app, monkeypatch):
     from simq.monitor import gpu
 
     monkeypatch.setattr(gpu, "_auto_backend", lambda: (None, "No NVIDIA GPU detected."))
-    window = MainWindow()
+    window = MainWindow(start_service=False)
     assert not window.gpu.available
     assert window.dashboard.gpu_cards == {}
     window.close()

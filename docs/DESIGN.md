@@ -154,61 +154,79 @@ simq                      open the window
 simq gui --demo           preview the dashboard with two simulated GPUs
 simq info                 print CPU, memory, GPUs and disks
 simq detect [--json]      print the simulation software found
-simq add <folder> [--cores N] [--gpu auto|0|1|none] [--after ID] [--at "22:00"]
+simq add <folder> [--cores N] [--gpu none|auto|0|1] [--after ID] [--at "22:00"] [--command …]
 simq ls                   list the queue
-simq check <ID>           quick check
-simq test <ID>            test run
-simq kill <ID>  |  simq pause <ID>  |  simq resume <ID>
-simq service start|stop|status
+simq queue start|pause
+simq check|test|corescan|run-now|kill|pause|resume|retry|hold|release|remove <ID>
+simq log <ID>             events and the end of the output
+simq service start|stop|status|run
 ```
 
 ---
 
-## 8. Code layout
+## 8. How it is built
+
+The **queue service** (`simq service run`) is a background process and the only
+thing that starts, signals or watches simulations. The window and the `simq`
+command share its SQLite database (`~/.simq/simq.db`, WAL mode). They edit jobs
+directly and ask the service to act (check, test, kill …) by adding rows to a
+`requests` table, which the service reads once a second.
+
+Each run is started through a small generated wrapper script
+(`~/.simq/runs/<id>/run.sh`). The wrapper enters the job folder, sources
+`amber.sh`, sets `CUDA_VISIBLE_DEVICES` and friends, pins the job with
+`taskset`, runs the command, and records the exit code in a file. Jobs run in
+their own process groups, so they outlive the service and the window. A
+restarted service adopts them again (matching process id and start time).
+
+NAMD configurations are Tcl, so SimQ includes a small Tcl interpreter
+(`simq/tcl.py`) that runs them with `run`/`minimize` replaced by counters. That
+gives exact step counts for loops, `udb_mult`, `source udb_md.conf` and
+`$env(UDB_PHASE)`, without NAMD or a system Tcl.
 
 ```
-Simulation-Queue/
-├── simq/
-│   ├── __main__.py          `simq` command
-│   ├── db.py                SQLite storage (~/.simq/simq.db)
-│   ├── service/
-│   │   ├── scheduler.py     picks which job runs next
-│   │   ├── runner.py        starts/stops processes, pinning, environment
-│   │   ├── resources.py     core and GPU pool
-│   │   └── api.py           local socket the window and CLI talk to
-│   ├── monitor/
-│   │   ├── system.py        CPU, RAM, disks (psutil)
-│   │   └── gpu.py           NVIDIA GPUs (NVML)
-│   ├── detect/software.py   finds NAMD, AMBER, GROMACS, …
-│   ├── jobs/                generic.py, namd.py, amber.py, udb.py
-│   ├── verify/              quick.py, testrun.py
-│   ├── estimate/            tcl_steps.py, progress.py, history.py, corescan.py
-│   ├── health.py
-│   ├── notify.py            desktop + email
-│   └── gui/                 main window, the 5 tabs, gauge widgets
-├── tests/
-├── docs/DESIGN.md, docs/UDB_NOTES.md
-├── pyproject.toml
-└── README.md
+simq/
+├── __main__.py        the `simq` command
+├── db.py              database: jobs, runs, requests, events, speed memory, settings
+├── tcl.py             small Tcl interpreter for NAMD configs
+├── present.py         status texts and predictions shared by window and CLI
+├── analyze/           namd.py, amber.py, udb.py (packages, resume plans), folder.py
+├── engine/
+│   ├── service.py     the queue service loop
+│   ├── scheduler.py   EASY backfilling, CPU pinning order, whole-queue plan
+│   ├── launch.py      wrapper script, process groups, signals
+│   ├── check.py       the quick check
+│   ├── progress.py    progress from NAMD logs / AMBER mdinfo
+│   ├── testrun.py     scratch copy, shrinking, speed measurement
+│   ├── estimate.py    speed memory and estimates
+│   ├── notify.py      desktop and email
+│   ├── autostart.py   systemd user service
+│   └── client.py      what the window and CLI call
+├── monitor/           system.py (psutil), gpu.py (NVML / nvidia-smi)
+├── detect/software.py software detection
+└── gui/               main window, dashboard, queue, software, history, settings
+tests/                 unit tests, plus end-to-end tests that run the real UDB
+                       scripts against fake namd3/tleap (tests/fakes/)
 ```
 
-**Requirements**
-- Linux, Python ≥ 3.10
-- PySide6, pyqtgraph, psutil, nvidia-ml-py
-- Tcl through Python's `tkinter`. On Ubuntu this needs the `python3-tk` package; if it's missing, SimQ falls back to `tclsh`.
-
-App data lives in `~/.simq/`: the database, job logs and scratch space for test runs.
+**Requirements:** Linux, Python ≥ 3.10, PySide6, pyqtgraph, psutil,
+nvidia-ml-py. No system Tcl is needed.
 
 ---
 
 ## 9. Build phases
 
-1. **Phase 1**: app skeleton, Dashboard tab (live CPU, RAM, GPU, disks), Software tab (detection).
-2. **Phase 2**: the queue. Add / duplicate / edit jobs, quick check, run / kill / pause / resume, core and GPU scheduling with pinning, both verification modes, moving on after a failure, delayed start and job dependencies, `simq` commands.
-3. **Phase 3**: estimates. Tcl step counter, UDB / NAMD / AMBER progress parsing, test run, speed memory, core-count test, whole-queue ETA.
-4. **Phase 4**: reliability. Crash recovery and UDB resume logic, health watch, desktop and email notifications, optional start-at-boot.
+All four phases are built and tested with simulated jobs:
 
-Each phase is pushed to GitHub. It's built and tested here with simulated jobs, then tested for real on the workstation (NAMD, AMBER, GPU).
+1. ✔ **Phase 1**: dashboard and software detection.
+2. ✔ **Phase 2**: the queue, scheduling with pinning, both verification modes,
+   dependencies, delayed start, the `simq` commands.
+3. ✔ **Phase 3**: Tcl step counter, progress parsing, test run, speed memory,
+   core-count test, whole-queue prediction.
+4. ✔ **Phase 4**: crash recovery with UDB resume logic, health watch,
+   notifications, automatic start.
+
+Still to do: a real run on the workstation (NAMD, AMBER, GPU).
 
 ## 10. Not in scope (for now)
 - Live MD plots (energy, temperature, density)

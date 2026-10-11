@@ -34,6 +34,8 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+# Separate branches that do the same thing often read more clearly.
+ignore = ["SIM108", "SIM114"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
