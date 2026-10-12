@@ -24,6 +24,7 @@ The first complete version.
 - **Notifications:** desktop pop-ups and email.
 - **Automatic start:** an optional systemd user service.
 - **Command line:** `simq add`, `ls`, `queue`, `check`, `test`, `corescan`, `run-now`, `kill`, `pause`, `resume`, `retry`, `hold`, `release`, `remove`, `log`, `service`, `info`, `detect`.
+- **License:** MIT.
 
 ### Fixed
 - `simq add` printed "1 CPUs, GPU none"; it now prints "1 CPU, no GPU".

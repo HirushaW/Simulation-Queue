@@ -8,6 +8,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey)
 ![Version](https://img.shields.io/badge/version-0.1.0-green)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ![The SimQ queue](docs/images/queue.png)
 
@@ -37,6 +38,7 @@ you can start from a terminal, and knows NAMD, AMBER and UDB packages in detail.
 11. [Questions and troubleshooting](#11-questions-and-troubleshooting)
 12. [For developers](#12-for-developers)
 13. [Status and limitations](#13-status-and-limitations)
+14. [License and author](#14-license-and-author)
 
 ---
 
@@ -487,6 +489,7 @@ tests/           unit tests, and end-to-end tests that run the real UDB scripts
 - [`docs/DESIGN.md`](docs/DESIGN.md): how SimQ is put together.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md): branches, pull requests and checks.
 - [`CHANGELOG.md`](CHANGELOG.md): what changed in each version.
+- [`LICENSE`](LICENSE): the MIT License.
 
 ## 13. Status and limitations
 
@@ -499,3 +502,10 @@ tests/           unit tests, and end-to-end tests that run the real UDB scripts
   on a workstation are the next step; please report anything odd.
 - Linux only, one machine, one user.
 - Live progress for NAMD, AMBER and UDB jobs; other programs show elapsed time.
+
+## 14. License and author
+
+[MIT License](LICENSE) © Hirusha Walgampaya. NAMD, AMBER, NVIDIA drivers and the
+other programs SimQ runs or detects are separate software under their own
+licences, and SimQ is not affiliated with them. Questions and bug reports:
+[open an issue](https://github.com/HirushaW/Simulation-Queue/issues).

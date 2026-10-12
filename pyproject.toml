@@ -5,7 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "simq"
 dynamic = ["version"]
-description = "A simulation queue for a Linux workstation: live resource dashboard, software detection, and (soon) a core- and GPU-aware job queue."
+description = "A simulation queue for a Linux workstation: live resource dashboard, software detection, and a CPU- and GPU-aware job queue with verification, estimates and crash recovery."
+license = { text = "MIT" }
+authors = [{ name = "Hirusha Walgampaya" }]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
