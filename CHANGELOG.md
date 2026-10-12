@@ -27,5 +27,6 @@ The first complete version.
 
 ### Fixed
 - `simq add` printed "1 CPUs, GPU none"; it now prints "1 CPU, no GPU".
+- A speed estimated from the clock at the start of a stage could replace the speed NAMD or AMBER reported, and end up in the speed memory. The reported speed is now kept.
 
 [0.1.0]: https://github.com/HirushaW/Simulation-Queue/releases/tag/v0.1.0
