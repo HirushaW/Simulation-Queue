@@ -661,12 +661,17 @@ class Service:
                 values["est_seconds"] = analysis["total_steps"] * s_per_step
                 values["est_source"] = "live"
             self.db.update_job(job.id, **values)
-            if s_per_step:
+            # A speed the program reports itself (NAMD TIMING, AMBER mdinfo) is exact;
+            # the wall-clock estimate from samples only fills in until one exists.
+            reported = prog.s_per_step is not None
+            stored = job.meta.get("speed") or {}
+            if s_per_step and (reported or not stored.get("reported")):
                 self.db.merge_meta(
                     job.id,
                     speed={
                         "s_per_step": s_per_step,
                         "source": "live",
+                        "reported": reported,
                         "cores": job.cores,
                         "time": now,
                     },

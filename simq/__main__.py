@@ -213,7 +213,9 @@ def _cmd_add(args: argparse.Namespace) -> int:
         print(f"simq: {exc}", file=sys.stderr)
         return 1
     job = db.job(job_id)
-    print(f"Added job {job_id}: {job.name} ({job.kind}, {job.cores} CPUs, GPU {job.gpu})")
+    cpus = f"{job.cores} CPU" + ("s" if job.cores != 1 else "")
+    gpu = {"none": "no GPU", "auto": "any free GPU"}.get(job.gpu, f"GPU {job.gpu}")
+    print(f"Added job {job_id}: {job.name} ({job.kind}, {cpus}, {gpu})")
     print(f"  command: {job.command}")
     if not client.service_status(db)["running"]:
         print("  The queue service is not running: start it with `simq service start`.")

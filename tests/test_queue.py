@@ -286,6 +286,8 @@ def test_udb_staged_run_crash_and_resume(svc, package, monkeypatch, tmp_path):
     monkeypatch.setenv("FAKE_NAMD_SPS", "0.003")
     monkeypatch.setenv("FAKE_NAMD_FAIL", "03_nvt_equil:200")
     monkeypatch.setenv("FAKE_NAMD_FAIL_FLAG", str(flag))
+    # Production lasts ~2.4 s here, shorter than the normal 3 s progress interval.
+    monkeypatch.setattr(service_module, "PROGRESS_EVERY_S", 0)
     db = svc.db
     job = client.add_job(db, package, REPORT, cores=2, retries=1)
     client.set_queue_running(db, True)
