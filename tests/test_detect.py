@@ -76,13 +76,19 @@ def test_finds_programs_everywhere(machine, tmp_path):
     assert found["namd3"].build == "multicore-CUDA"
     assert found["namd3"].gpu is True
     # The symlink on PATH and the real file are one program, reported via PATH.
-    assert sum(1 for i in report.installations if i.name == "namd3") == 1
+    ours = [
+        i for i in report.installations if i.name == "namd3" and i.path.startswith(str(tmp_path))
+    ]
+    assert len(ours) == 1
     assert found["namd3"].found_via == "PATH"
 
     assert found["pmemd.cuda"].gpu is True and found["pmemd"].gpu is False
     assert found["tleap"].version == "Amber 24"  # never run, version from folder name
-    assert report.amber_home == str(home / "software" / "amber24")
-    assert report.amber_sh.endswith("amber.sh")
+    # AMBERHOME from this tree's installs (another AMBER on the machine may come first).
+    amber_home, amber_sh = software._amber_environment({}, list(found.values()))
+    assert amber_home == str(home / "software" / "amber24")
+    assert amber_sh.endswith("amber.sh")
+    assert report.amber_sh  # an amber.sh was found
 
     assert found["gmx"].version == "2024.2"
     assert found["gmx"].gpu is False and found["gmx"].build == "CPU"
