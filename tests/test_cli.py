@@ -23,3 +23,12 @@ def test_gui_without_display(capsys, monkeypatch):
         monkeypatch.delenv(var, raising=False)
     assert main([]) == 1
     assert "no graphical display" in capsys.readouterr().err
+
+
+def test_add_prints_readable_resources(capsys, tmp_path):
+    folder = tmp_path / "job"
+    folder.mkdir()
+    (folder / "run.sh").write_text("true\n")
+    assert main(["add", str(folder), "--cores", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "(command, 1 CPU, no GPU)" in out
