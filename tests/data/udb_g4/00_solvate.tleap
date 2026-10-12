@@ -1,0 +1,33 @@
+# ============================================================
+# UDB v1.0  PAMAM G4  tLeap Solvation
+#
+# Drive this with `bash udb_solvate.sh`, not tleap directly: that script
+# refreshes the two marked lines below from `set box_pad` and `set ion_conc`
+# in udb_md.conf, and sizes the salt from the water count tLeap reports
+# rather than from a box volume guessed beforehand.
+# ============================================================
+source leaprc.gaff2
+source leaprc.water.tip3p
+
+loadamberparams dendrimer_pamam_gen4.frcmod
+mol = loadmol2 dendrimer_pamam_gen4_min_gaff.mol2
+
+check mol
+charge mol
+
+center mol
+solvatebox mol TIP3PBOX 15.0   # UDB_BOXPAD
+# 1. neutralise the solute -- tLeap picks the ion and the count
+#    itself; the sign it does not need is a no-op.
+addionsrand mol Na+ 0
+addionsrand mol Cl- 0
+# 2. bulk salt.  The count below is only UDB's pre-tLeap estimate,
+#    for 0.15 M at generation time; udb_solvate.sh rewrites it from
+#    `set ion_conc` in udb_md.conf and the real water count, so that
+#    file -- not this number -- is where the concentration lives.
+addionsrand mol Na+ 251 Cl- 251   # UDB_NSALT
+charge mol
+
+saveamberparm mol dendrimer_pamam_gen4_solvated.prmtop dendrimer_pamam_gen4_solvated.inpcrd
+savepdb mol dendrimer_pamam_gen4_solvated.pdb
+quit

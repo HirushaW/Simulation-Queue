@@ -1,0 +1,244 @@
+#############################################################
+##  UDB v1.0  -  PAMAM G4  -  ALL-IN-ONE NAMD SCRIPT
+#############################################################
+##
+##  1. JOB DESCRIPTION
+##
+##  Single-file equivalent of the 5-stage UDB pipeline:
+##
+##      minimise  ->  heat 0->T  ->  NVT  ->  NPT restrained
+##                ->  NPT free   ->  NPT production
+##
+##  Every adjustable parameter lives in udb_md.conf, sourced in
+##  section 2.  The staged pipeline (run_namd.sh) reads the same
+##  file, so one edit changes both run paths.  Sections 3 and 4
+##  should not need changing.
+##
+##  Run it:
+##      bash run_full.sh            everything, both phases
+##      bash run_full.sh resume     continue from the last restart
+##
+##  Or by hand, two invocations (see "Why two phases" below):
+##      UDB_PHASE=1 namd3 +p8 dendrimer_pamam_gen4_full.namd > p1.log
+##      UDB_PHASE=2 namd3 +p8 dendrimer_pamam_gen4_full.namd > p2.log
+##
+##  Inputs required in this directory:
+##      udb_md.conf
+##      dendrimer_pamam_gen4_solvated.prmtop
+##      dendrimer_pamam_gen4_solvated.inpcrd
+##      dendrimer_pamam_gen4_restrained.pdb   (B-column = 1 on solute heavy atoms;
+##                                run_full.sh regenerates it per phase)
+##
+##  Why two phases
+##      NAMD cannot switch the Langevin piston on part-way through a
+##      run.  Issuing `langevinPiston on` as a runtime command leaves
+##      the piston uninitialised and the periodic cell collapses within
+##      a few hundred steps ("Periodic cell has become too small for
+##      original patch grid!").  Measured on NAMD 3.0.2: it survives on
+##      the GPU-resident path and is fatal on CPU, so the split is kept
+##      unconditionally -- this file has to run anywhere.
+##          phase 1 : minimise -> heat -> NVT                  (piston off)
+##          phase 2 : NPT restrained -> NPT free -> production (piston on)
+##
+##  Restraints
+##      Held from minimisation onward and released inside phase 2, so
+##      the reference geometry is never stale.  That staleness is what
+##      made the staged pipeline blow up in RATTLE with BOUNDARY = 3e5.
+##
+##  Output
+##      phase 1 -> dendrimer_pamam_gen4_full_p1.*      phase 2 -> dendrimer_pamam_gen4_full_p2.*
+##      Two continuous trajectories, not five per-stage DCDs.  The
+##      staged pipeline is what analysis.tcl expects.
+##
+#############################################################
+
+
+#############################################################
+##  2. SETTINGS  -  all of them are in udb_md.conf          ##
+#############################################################
+
+source udb_md.conf
+
+set outname             ${prefix}_full
+
+set do_minimise         1                   ;# 0 = skip minimisation
+set resume              0                   ;# phase 2 only: 1 = continue from
+                                            ;#   ${outname}_p2.restart.*
+
+# Which half of the run this invocation performs.  run_full.sh sets
+# UDB_PHASE; edit the fallback below only if running NAMD by hand.
+if { [info exists env(UDB_PHASE)] } {
+    set phase $env(UDB_PHASE)
+} else {
+    set phase            1
+}
+
+
+#############################################################
+##  3. SIMULATION PARAMETERS                                ##
+#############################################################
+
+# ---- force field / topology ------------------------------------------
+amber                   on
+parmfile                ${prefix}_solvated.prmtop
+exclude                 scaled1-4
+oneFourScaling          1.0
+
+# ---- nonbonded --------------------------------------------------------
+cutoff                  $cutoff
+switching               on
+switchdist              $switchdist
+pairlistdist            $pairlistdist
+stepspercycle           $stepspercycle
+margin                  $margin
+
+# ---- PME --------------------------------------------------------------
+PME                     yes
+PMEGridSizeX            $pme_x
+PMEGridSizeY            $pme_y
+PMEGridSizeZ            $pme_z
+
+# ---- integrator -------------------------------------------------------
+rigidBonds              $rigid_bonds
+rigidTolerance          1e-8
+timestep                $timestep_fs
+
+# ---- GPU --------------------------------------------------------------
+# GPU-resident mode cannot be toggled mid-run, so it is set here for the
+# whole invocation.  run_full.sh matches the command line to this value.
+if { $gpu } {
+    GPUresident         on
+}
+
+# ---- starting coordinates --------------------------------------------
+# `ambercoor` must always be given while `amber on` is set, even when
+# bincoordinates supersedes it - without it NAMD aborts with
+# "Coordinate file not found!".
+ambercoor               ${prefix}_solvated.inpcrd
+if { $phase == 1 } {
+    temperature         0
+    cellBasisVector1    $cell_x  0.0      0.0
+    cellBasisVector2    0.0      $cell_y  0.0
+    cellBasisVector3    0.0      0.0      $cell_z
+    cellOrigin          $cell_ox $cell_oy $cell_oz
+} elseif { $resume } {
+    bincoordinates      ${outname}_p2.restart.coor
+    binvelocities       ${outname}_p2.restart.vel
+    extendedSystem      ${outname}_p2.restart.xsc
+} else {
+    # phase 1's *final* output, not its .restart.* - NAMD always writes the
+    # final files, whereas .restart.* only appears if restartfreq divides
+    # the run length.
+    bincoordinates      ${outname}_p1.coor
+    binvelocities       ${outname}_p1.vel
+    extendedSystem      ${outname}_p1.xsc
+}
+wrapAll                 on
+wrapWater               on
+
+# ---- output -----------------------------------------------------------
+if { $phase == 1 } {
+    outputName          ${outname}_p1
+} else {
+    outputName          ${outname}_p2
+}
+binaryoutput            yes
+binaryrestart           yes
+outputEnergies          [udb_mult $energy_freq  $stepspercycle]
+restartfreq             [udb_mult $restart_freq $stepspercycle]
+dcdfreq                 [udb_mult $traj_freq    $stepspercycle]
+xstFreq                 [udb_mult $traj_freq    $stepspercycle]
+
+# ---- thermostat -------------------------------------------------------
+langevin                on
+langevinDamping         $langevin_damping
+langevinTemp            $temperature
+langevinHydrogen        off
+
+# ---- barostat ---------------------------------------------------------
+# Set statically per phase.  It must NOT be toggled with a runtime
+# `langevinPiston on` command - see "Why two phases" in section 1.
+useGroupPressure        yes
+useFlexibleCell         no
+useConstantArea         no
+if { $phase == 1 } {
+    langevinPiston      off
+} else {
+    langevinPiston      on
+}
+langevinPistonTarget    $pressure
+langevinPistonPeriod    $piston_period
+langevinPistonDecay     $piston_decay
+langevinPistonTemp      $temperature
+
+# ---- positional restraints on solute heavy atoms ---------------------
+# Active from minimisation onward, so the reference geometry is never
+# stale.  Released in section 4 before the free NPT phase.
+#
+# Skipped entirely when `set use_restraints 0` in udb_md.conf: phase 2 is
+# then a single free NPT run and ${outname}_p2.dcd contains only
+# unrestrained frames.  run_full.sh reads the same flag and does not build
+# ${prefix}_restrained.pdb when it is 0.
+if { $use_restraints } {
+    constraints         on
+    consref             ${prefix}_restrained.pdb
+    conskfile           ${prefix}_restrained.pdb
+    conskcol            B
+    constraintScaling   $restraint_k
+}
+
+
+#############################################################
+##  4. EXECUTION SCRIPT                                     ##
+#############################################################
+
+if { $phase == 1 } {
+
+    # ---- Stage 1 - energy minimisation, solute held ------------------
+    if { $do_minimise } {
+        print "UDB: phase 1, stage 1/5  minimisation  ($min_steps steps)"
+        minimize [udb_mult $min_steps $stepspercycle]
+        reinitvels 0
+    }
+
+    # ---- Stage 2 - heat 0 -> $temperature K, solute held -------------
+    print "UDB: phase 1, stage 2/5  heating 0 -> $temperature K  ($heat_steps steps)"
+    set chunk [udb_mult [expr {$heat_steps / $heat_windows}] $stepspercycle]
+    for { set i 1 } { $i <= $heat_windows } { incr i } {
+        langevinTemp [expr {double($temperature) * $i / $heat_windows}]
+        run $chunk
+    }
+    langevinTemp $temperature
+
+    # ---- Stage 3 - NVT equilibration, solute held --------------------
+    print "UDB: phase 1, stage 3/5  NVT equilibration at $temperature K  ($nvt_steps steps)"
+    run [udb_mult $nvt_steps $stepspercycle]
+
+    print "UDB: phase 1 complete -> ${outname}_p1.coor   now run phase 2"
+
+} else {
+
+    if { $resume } {
+        print "UDB: phase 2 resuming from ${outname}_p2.restart.*"
+        if { $use_restraints } { constraintScaling 0.0 }
+    } else {
+        # ---- Stage 4a - NPT, solute still restrained -----------------
+        # Only when use_restraints is 1.  Otherwise stage 4 is one free NPT
+        # run of $npt_free steps and no restrained frames reach the DCD.
+        if { $use_restraints } {
+            print "UDB: phase 2, stage 4/5  NPT equilibration, restrained  ($npt_restrained steps)"
+            run [udb_mult $npt_restrained $stepspercycle]
+            constraintScaling 0.0
+        }
+
+        # ---- Stage 4b - NPT, unrestrained ----------------------------
+        print "UDB: phase 2, stage 4/5  NPT equilibration, free  ($npt_free steps)"
+        run [udb_mult $npt_free $stepspercycle]
+    }
+
+    # ---- Stage 5 - NPT production ------------------------------------
+    print "UDB: phase 2, stage 5/5  production  ($prod_steps steps)"
+    run [udb_mult $prod_steps $stepspercycle]
+
+    print "UDB: all stages complete -> ${outname}_p2.dcd / ${outname}_p2.restart.*"
+}
